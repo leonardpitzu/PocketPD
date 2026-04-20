@@ -3,6 +3,9 @@
 .pioenvs
 .piolibdeps
 
+# Python
+.venv
+
 # IDE
 .vscode
 .history
