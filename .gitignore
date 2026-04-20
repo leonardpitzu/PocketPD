@@ -1,3 +1,25 @@
+# PlatformIO
 .pio
+.pioenvs
+.piolibdeps
+
+# IDE
 .vscode
 .history
+
+# macOS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+
+# Compiled object files
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+
+# Logs
+*.log
