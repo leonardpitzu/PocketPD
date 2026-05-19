@@ -29,3 +29,6 @@ build/
 
 # Logs
 *.log
+
+# Syncthing conflict files
+*.sync-conflict-*
