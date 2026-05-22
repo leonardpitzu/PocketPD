@@ -64,7 +64,7 @@ namespace ap33772 {
     constexpr int NTC_DEFAULT_TR100 = 974;  // 0x03CE
 
     // ── begin() poll budget for PD negotiation completion
-    constexpr uint32_t BEGIN_POLL_TIMEOUT_MS = 1000;
+    constexpr uint32_t BEGIN_POLL_TIMEOUT_MS = 10000;
     constexpr uint32_t BEGIN_POLL_INTERVAL_MS = 25;
 
     /**
@@ -223,20 +223,17 @@ namespace ap33772 {
          */
         [[nodiscard]]
         bool begin() {
-            // Don't read STATUS register here. STATUS is read-clear (Table 7). A single read
-            // returns the latched event flags and resets them to zero. Reading at boot would
-            // discard any pending event before the firmware can act on it.
-
+            // Poll PDONUM (0x1C, RO) until the source PDO list is populated.
+            //   1. Cold boot, slow source: chargers like Anker Prime / Apple need
+            //      several hundred ms past VBUS-on before negotiation completes and
+            //      PDONUM becomes nonzero.
+            //   2. Warm boot (MCU reset, VBUS already up): negotiation already done,
+            //      PDONUM is already nonzero on the first read — no wait.
             uint8_t count = 0;
             uint32_t waited_ms = 0;
-
-            // Polling loop for some slow chargers
             while (true) {
-                if (!m_i2c.read(reg::PDONUM, &count, 1)) {
-                    return false;
-                }
-
-                if (count > 0) {
+                const bool ok = m_i2c.read(reg::PDONUM, &count, 1);
+                if (ok && count > 0) {
                     break;
                 }
 

@@ -123,14 +123,14 @@ protected:
 };
 
 // —— begin() behavior
-TEST_F(AP33772Test, BeginFailsWhenOVPActive) {
-    scriptReadByte(reg::STATUS, 0x10, &m_status_byte);
+TEST_F(AP33772Test, BeginFailsWhenPDONUMStaysZero) {
+    // Default mock returns PDONUM=0; begin() should poll up to its budget and fail.
     AP33772 ap(m_i2c_device, noop_delay);
     EXPECT_FALSE(ap.begin());
 }
 
-TEST_F(AP33772Test, BeginFailsWhenNotReady) {
-    scriptReadByte(reg::STATUS, 0x00, &m_status_byte);
+TEST_F(AP33772Test, BeginFailsWhenI2CReadFails) {
+    ON_CALL(m_i2c_device, read_bytes(reg::PDONUM, _, 1)).WillByDefault(Return(false));
     AP33772 ap(m_i2c_device, noop_delay);
     EXPECT_FALSE(ap.begin());
 }
@@ -145,12 +145,14 @@ TEST_F(AP33772Test, BeginLoadsPDOsOnSuccess) {
     EXPECT_TRUE(ap.has_pps_profile());
 }
 
-// Issue #97: slow chargers (Anker Prime, Apple) finish PD negotiation hundreds of ms after
-// VBUS-on. begin() must poll PDONUM rather than fail on the first count=0 read.
-TEST_F(AP33772Test, BeginPollsUntilPDOsArrive) {
+// Issue #97: slow chargers (Anker Prime, Apple) finish PD negotiation hundreds of ms
+// after VBUS-on. begin() polls PDONUM until nonzero rather than failing on the first
+// count=0 read. STATUS-polling does not converge on warm boot (event bits don't re-set
+// when the chip is already in steady state), so PDONUM is the source of truth.
+TEST_F(AP33772Test, BeginPollsPDONUMUntilNonzero) {
     scriptHealthyBus({fixed_pdo_5v_3a(), pps_pdo_3v3_11v_3a()});
 
-    // Override the PDONUM default to return 0 the first 5 reads, then the real count.
+    // Return PDONUM=0 the first 5 reads (chip still negotiating), then real count.
     int poll_calls = 0;
     ON_CALL(m_i2c_device, read_bytes(reg::PDONUM, _, 1))
         .WillByDefault(Invoke([&](uint8_t, uint8_t* buf, size_t) {
