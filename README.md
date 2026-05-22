@@ -33,16 +33,15 @@ Simple, reliable, works when you need it.
 
 ```mermaid
 flowchart LR
-    A[Boot up] --> |0.5s|B[Obtain charger capability]
-    B --> |1.5s|C[Display capabilities]
-    C --> |3s|D[Normal operation]
-    D --> |Long Press V/I|E[Menu]
-    B --> |Short Press any button|D
-    C --> |Short Press any button|D
-    E --> |Long Press V/I|D
-    E --> |Long Press Encoder|D
-    D --> |Long Press ON/OFF|F[Energy Screen]
-    F --> |Long Press ON/OFF|D
+    A[Boot] --> |0.5s|B[Obtain charger PDOs]
+    B --> |timeout|C[Profile Picker]
+    C --> |encoder select + confirm|D[Normal operation]
+    B --> |button / encoder|C
+    D --> |L long press|C
+    D --> |R long press|E[Energy Screen]
+    E --> |R long press|D
+    D --> |L+R long press|D_lock[Input Lock]
+    D_lock --> |L+R long press|D
 ```
 
 ---
@@ -57,6 +56,8 @@ flowchart LR
 | `0.9.7` | x | x | x | x |
 | `0.9.9` | x | x | x | x |
 | `1.0.0` | x | x | x | x |
+| `2.0.0` | x | x | x | x |
+| `2.0.1` | x | x | x | x |
 
 The main difference between HW 1.0 and later revisions is the sense
 resistor change (10 mΩ → 5 mΩ), which affects the current reading scale.
@@ -119,10 +120,11 @@ While still on the boot screen:
 |---|---|
 | Rotate encoder | Increase / decrease voltage or current |
 | Short press encoder | Toggle fine ↔ coarse increment |
-| Short press V/A button | Switch between voltage and current adjust |
-| Long press V/A button | Enter MENU screen |
-| Short press On/Off button | Enable / disable output |
-| Long press On/Off button | Enter ENERGY screen |
+| Short press L button | Switch between voltage and current adjust |
+| Long press L button | Return to Profile Picker |
+| Short press R button | Enable / disable output |
+| Long press R button | Enter ENERGY screen |
+| Long press L+R | Toggle input lock |
 
 <p align="center" width="100%">
 <video src="https://github.com/user-attachments/assets/1aa5be08-7ff9-443c-b3c7-ea3d54f766d1" width="80%" controls></video>
