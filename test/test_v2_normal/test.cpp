@@ -13,6 +13,8 @@
 #include <MockPdSink.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <tempo/bus/event_queue.h>
+#include <tempo/bus/publisher.h>
 #include <tempo/stage/conductor.h>
 
 #include "v2/app.h"
@@ -21,10 +23,26 @@
 #include "v2/stages/profile_picker_stage.h"
 
 using namespace pocketpd;
+using ::testing::_;
 using ::testing::NiceMock;
 using ::testing::Return;
+using ::testing::StrEq;
 
 using TestConductor = App::Conductor;
+
+using TestQueue = tempo::EventQueue<Event, 32>;
+using TestPublisher = tempo::QueuePublisher<Event, 32>;
+
+namespace {
+    template <typename T>
+    const T* pop_as(TestQueue& q) {
+        static Event last;
+        if (!q.pop(last)) {
+            return nullptr;
+        }
+        return std::get_if<T>(&last);
+    }
+}
 
 TEST(NormalStage, OnEnterPdoProfileRequestsFixedPdo) {
     NiceMock<MockDisplay> display;
@@ -40,7 +58,7 @@ TEST(NormalStage, OnEnterPdoProfileRequestsFixedPdo) {
     conductor.register_stage(normal);
 
     normal.prepare(2);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 }
 
 TEST(NormalStage, OnEnterPpsProfileResetsTargetsToDefaults) {
@@ -53,14 +71,14 @@ TEST(NormalStage, OnEnterPpsProfileResetsTargetsToDefaults) {
     EXPECT_CALL(sink, pdo_max_voltage_mv(1)).WillRepeatedly(Return(11000));
     EXPECT_CALL(sink, pdo_max_current_ma(1)).WillRepeatedly(Return(3000));
     EXPECT_CALL(sink, set_pdo).Times(0);
-    EXPECT_CALL(sink, set_pps_pdo(1, 5000, 1000)).Times(1).WillOnce(Return(true));
+    EXPECT_CALL(sink, set_pps_pdo).Times(0);  // PpsControlTask owns sink writes
 
     NormalStage normal(display, sink, gate);
     TestConductor conductor;
     conductor.register_stage(normal);
 
     normal.prepare(1);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
     EXPECT_EQ(normal.target_mv(), 5000);
     EXPECT_EQ(normal.target_ma(), 1000);
 }
@@ -79,13 +97,13 @@ TEST(NormalStage, ReEnteringSamePpsProfilePreservesEdits) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(1);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, EncoderEvent{-2}, 0);
     ASSERT_EQ(normal.target_mv(), 7000);
 
     normal.prepare(1);
-    normal.on_enter(conductor);
+    normal.on_enter(conductor, 0);
     EXPECT_EQ(normal.target_mv(), 7000);
     EXPECT_EQ(normal.target_ma(), 1000);
 }
@@ -108,26 +126,30 @@ TEST(NormalStage, SwitchingPpsProfilesResetsTargetsToNewMinimum) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(1);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
     normal.on_event(conductor, EncoderEvent{-100}, 0);
     ASSERT_NE(normal.target_mv(), 3300);
 
     normal.prepare(2);
-    normal.on_enter(conductor);
+    normal.on_enter(conductor, 0);
     EXPECT_EQ(normal.target_mv(), 5000);
     EXPECT_EQ(normal.target_ma(), 1000);
 }
 
-TEST(NormalStage, OnEnterWithNegativeIndexRendersNoProfileSelected) {
+TEST(NormalStage, OnEnterWithNegativeIndexRendersPassthrough) {
+    using ::testing::_;
+    using ::testing::AnyNumber;
     using ::testing::HasSubstr;
 
     NiceMock<MockDisplay> display;
     NiceMock<MockPdSink> sink;
     NiceMock<MockOutputGate> gate;
+    EXPECT_CALL(sink, pdo_count()).WillRepeatedly(Return(0));
     EXPECT_CALL(sink, set_pdo).Times(0);
     EXPECT_CALL(sink, set_pps_pdo).Times(0);
     EXPECT_CALL(display, clear()).Times(::testing::AtLeast(1));
-    EXPECT_CALL(display, draw_text(::testing::_, ::testing::_, HasSubstr("No Profile Selected")))
+    EXPECT_CALL(display, draw_text(_, _, _)).Times(AnyNumber());
+    EXPECT_CALL(display, draw_text(_, _, HasSubstr("Passthrough")))
         .Times(::testing::AtLeast(1));
     EXPECT_CALL(display, flush()).Times(::testing::AtLeast(1));
 
@@ -135,7 +157,7 @@ TEST(NormalStage, OnEnterWithNegativeIndexRendersNoProfileSelected) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(-1);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 }
 
 TEST(NormalStage, RShortToggleEnablesAndDisablesOutput) {
@@ -153,7 +175,7 @@ TEST(NormalStage, RShortToggleEnablesAndDisablesOutput) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::R, Gesture::SHORT}, 0);
     EXPECT_TRUE(enabled);
@@ -162,7 +184,7 @@ TEST(NormalStage, RShortToggleEnablesAndDisablesOutput) {
     EXPECT_FALSE(enabled);
 }
 
-TEST(NormalStage, LLongRequestsProfilePicker) {
+TEST(NormalStage, LLongRequestsMenu) {
     NiceMock<MockDisplay> display;
     NiceMock<MockPdSink> sink;
     NiceMock<MockOutputGate> gate;
@@ -170,18 +192,18 @@ TEST(NormalStage, LLongRequestsProfilePicker) {
     EXPECT_CALL(sink, set_pdo).WillRepeatedly(Return(true));
 
     NormalStage normal(display, sink, gate);
-    ProfilePickerStage picker(display, sink);
+    MenuStage menu(display);
     TestConductor conductor;
     conductor.register_stage(normal);
-    conductor.register_stage(picker);
+    conductor.register_stage(menu);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::L, Gesture::LONG}, 0);
 
     EXPECT_TRUE(conductor.has_pending());
-    EXPECT_TRUE(conductor.apply_pending_transition());
-    EXPECT_EQ(conductor.current_index(), TestConductor::index_of<ProfilePickerStage>());
+    EXPECT_TRUE(conductor.apply_pending_transition(0));
+    EXPECT_EQ(conductor.current_index(), TestConductor::index_of<MenuStage>());
 }
 
 TEST(NormalStage, EncoderEventsIgnoredInPdoBranch) {
@@ -196,7 +218,7 @@ TEST(NormalStage, EncoderEventsIgnoredInPdoBranch) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     ::testing::Mock::VerifyAndClearExpectations(&gate);
     EXPECT_CALL(gate, enable).Times(0);
@@ -223,7 +245,7 @@ namespace {
             EXPECT_CALL(sink, set_pps_pdo).WillRepeatedly(Return(true));
             conductor.register_stage(normal);
             normal.prepare(static_cast<int8_t>(pdo_index));
-            conductor.start<NormalStage>();
+            conductor.start<NormalStage>(0);
         }
     };
 
@@ -231,7 +253,6 @@ namespace {
 
 TEST(NormalStage, EncoderDeltaInVoltageModeAdjustsTargetMv) {
     PpsHarness h;
-    EXPECT_CALL(h.sink, set_pps_pdo(1, 8000, 1000)).Times(1).WillOnce(Return(true));
     h.normal.on_event(h.conductor, EncoderEvent{-3}, 0);
     EXPECT_EQ(h.normal.target_mv(), 8000);
     EXPECT_EQ(h.normal.adjust_mode(), AdjustMode::VOLTAGE);
@@ -242,7 +263,6 @@ TEST(NormalStage, EncoderDeltaInCurrentModeAdjustsTargetMa) {
     h.normal.on_event(h.conductor, ButtonEvent{ButtonId::L, Gesture::SHORT}, 0);
     ASSERT_EQ(h.normal.adjust_mode(), AdjustMode::CURRENT);
 
-    EXPECT_CALL(h.sink, set_pps_pdo(1, 5000, 3000)).Times(1).WillOnce(Return(true));
     h.normal.on_event(h.conductor, EncoderEvent{-4}, 0);
     EXPECT_EQ(h.normal.target_ma(), 3000);
 }
@@ -269,7 +289,6 @@ TEST(NormalStage, EncoderEditUsesActiveIncrementMagnitude) {
     PpsHarness h;
     ASSERT_EQ(h.normal.voltage_increment_index(), 0);
 
-    EXPECT_CALL(h.sink, set_pps_pdo(1, 6000, 1000)).Times(1).WillOnce(Return(true));
     h.normal.on_event(h.conductor, EncoderEvent{-1}, 0);
     EXPECT_EQ(h.normal.target_mv(), 6000);
 }
@@ -318,7 +337,7 @@ TEST(NormalStage, LShortDoesNothingInPdoBranch) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     const auto mode_before = normal.adjust_mode();
     normal.on_event(conductor, ButtonEvent{ButtonId::L, Gesture::SHORT}, 0);
@@ -360,7 +379,7 @@ TEST(NormalStage, OnEnterPdoBranchRendersVAReadoutAndPdoIndex) {
         SensorEvent{LoadReading{0, 5000, 1234}, SupplyReading{0, 20000, true}},
         0
     );
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 }
 
 TEST(NormalView, LockedRendersPadlock) {
@@ -377,8 +396,7 @@ TEST(NormalView, LockedRendersPadlock) {
     ).Times(1);
 
     NormalViewModel vm{};
-    vm.has_profile = true;
-    vm.is_pps = false;
+    vm.mode = FixedMode{};
     vm.output_enabled = false;
     vm.locked = true;
     vm.active_pdo_index = 0;
@@ -396,8 +414,7 @@ TEST(NormalView, UnlockedDoesNotDrawPadlock) {
     ).Times(0);
 
     NormalViewModel vm{};
-    vm.has_profile = true;
-    vm.is_pps = false;
+    vm.mode = FixedMode{};
     vm.output_enabled = false;
     vm.locked = false;
     vm.active_pdo_index = 0;
@@ -419,8 +436,7 @@ TEST(NormalView, ReadoutHiddenKeepsLabelsHidesValues) {
     EXPECT_CALL(display, draw_text(_, 48, HasSubstr("1."))).Times(0);
 
     NormalViewModel vm{};
-    vm.has_profile = true;
-    vm.is_pps = false;
+    vm.mode = FixedMode{};
     vm.output_enabled = false;
     vm.readout_visible = false;
     vm.active_pdo_index = 0;
@@ -441,7 +457,7 @@ TEST(NormalStage, ComboLongTogglesLock) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     EXPECT_FALSE(normal.locked());
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
@@ -463,7 +479,7 @@ TEST(NormalStage, LockedIgnoresRShort) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
     ASSERT_TRUE(normal.locked());
@@ -485,7 +501,7 @@ TEST(NormalStage, LockedIgnoresEncoder) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(1);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     const int32_t before = normal.target_mv();
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
@@ -504,13 +520,13 @@ TEST(NormalStage, OnEnterResetsLocked) {
     TestConductor conductor;
     conductor.register_stage(normal);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
     ASSERT_TRUE(normal.locked());
 
     normal.prepare(0);
-    normal.on_enter(conductor);
+    normal.on_enter(conductor, 0);
     EXPECT_FALSE(normal.locked());
 }
 
@@ -527,7 +543,7 @@ TEST(NormalStage, LockedIgnoresLLong) {
     conductor.register_stage(normal);
     conductor.register_stage(picker);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
     ASSERT_TRUE(normal.locked());
@@ -549,13 +565,207 @@ TEST(NormalStage, LockedIgnoresRLong) {
     conductor.register_stage(normal);
     conductor.register_stage(energy);
     normal.prepare(0);
-    conductor.start<NormalStage>();
+    conductor.start<NormalStage>(0);
 
     normal.on_event(conductor, ButtonEvent{ButtonId::L_R, Gesture::LONG}, 0);
     ASSERT_TRUE(normal.locked());
 
     normal.on_event(conductor, ButtonEvent{ButtonId::R, Gesture::LONG}, 0);
     EXPECT_TRUE(normal.locked());
+}
+
+namespace {
+    // Pops events from the queue and returns the first PpsTargetEvent matching `match`,
+    // or nullptr if the queue is exhausted. `pop_as` already consumes one event per call.
+    template <typename Pred>
+    bool find_pps_event(TestQueue& q, Pred match) {
+        while (true) {
+            const PpsTargetEvent* evt = pop_as<PpsTargetEvent>(q);
+            if (evt == nullptr) return false;     // queue empty
+            if (match(*evt)) return true;
+        }
+    }
+}
+
+TEST(NormalStagePublishing, EmitsPpsTargetOnPpsEntry) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    NiceMock<MockOutputGate> gate;
+
+    EXPECT_CALL(sink, is_index_pps(::testing::_)).WillRepeatedly(Return(true));
+    EXPECT_CALL(sink, pdo_min_voltage_mv(::testing::_)).WillRepeatedly(Return(3300));
+    EXPECT_CALL(sink, pdo_max_voltage_mv(::testing::_)).WillRepeatedly(Return(11000));
+    EXPECT_CALL(sink, pdo_max_current_ma(::testing::_)).WillRepeatedly(Return(3000));
+    EXPECT_CALL(sink, set_pps_pdo).WillRepeatedly(Return(true));
+
+    NormalStage normal(display, sink, gate);
+    TestQueue queue;
+    TestPublisher publisher(queue);
+    normal.attach_publisher_INTERNAL_DO_NOT_USE(publisher);
+
+    TestConductor conductor;
+    conductor.register_stage(normal);
+    normal.prepare(1);
+    conductor.start<NormalStage>(0);
+
+    EXPECT_TRUE(find_pps_event(queue, [](const PpsTargetEvent& e) {
+        return e.pdo_index == 1 && e.target_mv == 5000 && e.target_ma == 1000;
+    }));
+}
+
+TEST(NormalStagePublishing, EmitsInactivePpsOnFixedEntry) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    NiceMock<MockOutputGate> gate;
+
+    EXPECT_CALL(sink, is_index_pps(::testing::_)).WillRepeatedly(Return(false));
+    EXPECT_CALL(sink, set_pdo(2)).WillRepeatedly(Return(true));
+
+    NormalStage normal(display, sink, gate);
+    TestQueue queue;
+    TestPublisher publisher(queue);
+    normal.attach_publisher_INTERNAL_DO_NOT_USE(publisher);
+
+    TestConductor conductor;
+    conductor.register_stage(normal);
+    normal.prepare(2);
+    conductor.start<NormalStage>(0);
+
+    EXPECT_TRUE(find_pps_event(queue, [](const PpsTargetEvent& e) {
+        return e.pdo_index == -1 && e.target_mv == 0 && e.target_ma == 0;
+    }));
+}
+
+TEST(NormalStagePublishing, EmitsInactivePpsOnPassthroughEntry) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    NiceMock<MockOutputGate> gate;
+    EXPECT_CALL(sink, pdo_count()).WillRepeatedly(Return(0));
+
+    NormalStage normal(display, sink, gate);
+    TestQueue queue;
+    TestPublisher publisher(queue);
+    normal.attach_publisher_INTERNAL_DO_NOT_USE(publisher);
+
+    TestConductor conductor;
+    conductor.register_stage(normal);
+    conductor.start<NormalStage>(0);
+
+    EXPECT_TRUE(find_pps_event(queue, [](const PpsTargetEvent& e) {
+        return e.pdo_index == -1;
+    }));
+}
+
+TEST(NormalStagePublishing, EmitsRefreshedPpsTargetOnEncoderApply) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    NiceMock<MockOutputGate> gate;
+
+    EXPECT_CALL(sink, is_index_pps(::testing::_)).WillRepeatedly(Return(true));
+    EXPECT_CALL(sink, pdo_min_voltage_mv(::testing::_)).WillRepeatedly(Return(3300));
+    EXPECT_CALL(sink, pdo_max_voltage_mv(::testing::_)).WillRepeatedly(Return(11000));
+    EXPECT_CALL(sink, pdo_max_current_ma(::testing::_)).WillRepeatedly(Return(3000));
+    EXPECT_CALL(sink, set_pps_pdo).WillRepeatedly(Return(true));
+
+    NormalStage normal(display, sink, gate);
+    TestQueue queue;
+    TestPublisher publisher(queue);
+    normal.attach_publisher_INTERNAL_DO_NOT_USE(publisher);
+
+    TestConductor conductor;
+    conductor.register_stage(normal);
+    normal.prepare(0);
+    conductor.start<NormalStage>(0);
+
+    // Drain entry events.
+    while (pop_as<PpsTargetEvent>(queue) != nullptr) {}
+
+    normal.on_event(conductor, EncoderEvent{-1}, 0);
+
+    // The encoder delta is sign-flipped inside PPSMode::on_encoder; encoder -1 with
+    // voltage_idx = 0 yields target += VOLTAGE_INCREMENTS_MV[0] = +1000 mV.
+    const int32_t expected = 5000 + static_cast<int32_t>(pocketpd::VOLTAGE_INCREMENTS_MV[0]);
+    EXPECT_TRUE(find_pps_event(queue, [&](const PpsTargetEvent& e) {
+        return e.pdo_index == 0 && e.target_mv == expected;
+    }));
+}
+
+TEST(NormalStageCompState, CachesCompStateEventForViewModel) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    NiceMock<MockOutputGate> gate;
+    EXPECT_CALL(sink, is_index_pps(::testing::_)).WillRepeatedly(Return(true));
+    EXPECT_CALL(sink, pdo_min_voltage_mv).WillRepeatedly(Return(3300));
+    EXPECT_CALL(sink, pdo_max_voltage_mv).WillRepeatedly(Return(11000));
+    EXPECT_CALL(sink, pdo_max_current_ma).WillRepeatedly(Return(3000));
+    EXPECT_CALL(sink, set_pps_pdo).WillRepeatedly(Return(true));
+
+    NormalStage normal(display, sink, gate);
+    TestConductor conductor;
+    conductor.register_stage(normal);
+    normal.prepare(0);
+    conductor.start<NormalStage>(0);
+
+    normal.on_event(conductor, CompStateEvent{60}, 0);
+    EXPECT_EQ(normal.comp_offset_mv(), 60);
+
+    normal.on_event(conductor, CompStateEvent{0}, 0);
+    EXPECT_EQ(normal.comp_offset_mv(), 0);
+}
+
+namespace {
+    // Helper that builds a PPSMode pinned to a stub sink. PPSMode has no default ctor;
+    // it requires a PdSinkController&. The clamp call inside its ctor consults the sink
+    // for min/max voltage and max current — stub those to wide-open values.
+    PPSMode make_pps_mode(MockPdSink& sink, int32_t target_mv, int32_t target_ma) {
+        ON_CALL(sink, pdo_min_voltage_mv(_)).WillByDefault(Return(3300));
+        ON_CALL(sink, pdo_max_voltage_mv(_)).WillByDefault(Return(11000));
+        ON_CALL(sink, pdo_max_current_ma(_)).WillByDefault(Return(3000));
+        PPSMode mode{sink, 0};
+        mode.target_mv = target_mv;
+        mode.target_ma = target_ma;
+        return mode;
+    }
+}
+
+TEST(PpsViewRender, OffsetSuffixHiddenWhenZero) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    EXPECT_CALL(display, draw_text(_, _, ::testing::HasSubstr("+"))).Times(0);
+    EXPECT_CALL(display, draw_text(_, _, _)).Times(::testing::AnyNumber());
+    EXPECT_CALL(display, text_width(_)).WillRepeatedly(Return(20));
+    EXPECT_CALL(display, set_font).Times(::testing::AnyNumber());
+    EXPECT_CALL(display, clear).Times(1);
+    EXPECT_CALL(display, draw_box).Times(::testing::AnyNumber());
+
+    NormalViewModel vm{};
+    vm.mode = make_pps_mode(sink, 5000, 1000);
+    vm.active_pdo_index = 0;
+    vm.comp_offset_mv = 0;
+    vm.output_enabled = true;
+    vm.readout_visible = true;
+
+    NormalView::render(display, vm);
+}
+
+TEST(PpsViewRender, OffsetSuffixRenderedWhenNonZero) {
+    NiceMock<MockDisplay> display;
+    NiceMock<MockPdSink> sink;
+    EXPECT_CALL(display, draw_text(_, _, _)).Times(::testing::AnyNumber());
+    EXPECT_CALL(display, draw_text(_, _, StrEq("+60"))).Times(1);
+    EXPECT_CALL(display, text_width(_)).WillRepeatedly(Return(20));
+    EXPECT_CALL(display, set_font).Times(::testing::AnyNumber());
+    EXPECT_CALL(display, clear).Times(1);
+    EXPECT_CALL(display, draw_box).Times(::testing::AnyNumber());
+
+    NormalViewModel vm{};
+    vm.mode = make_pps_mode(sink, 5000, 1000);
+    vm.active_pdo_index = 0;
+    vm.comp_offset_mv = 60;
+    vm.output_enabled = true;
+    vm.readout_visible = true;
+
+    NormalView::render(display, vm);
 }
 
 int main(int argc, char** argv) {
