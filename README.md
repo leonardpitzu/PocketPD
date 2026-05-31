@@ -17,6 +17,8 @@ Simple, reliable, works when you need it.
 | **Controls** | Rotary encoder + two buttons (V/A, On/Off) |
 | **Display** | OLED — voltage, current, power, energy |
 | **Profiles** | PPS (variable) and fixed PDO selection |
+| **Cable comp** | IR-drop compensation holds voltage at the load |
+| **Input lock** | L+R long-press freezes all controls |
 | **MCU** | RP2040 (Raspberry Pi Pico) |
 | **Framework** | Arduino (earlephilhower core) via PlatformIO |
 
@@ -37,9 +39,12 @@ flowchart LR
     B --> |timeout|C[Profile Picker]
     C --> |encoder select + confirm|D[Normal operation]
     B --> |button / encoder|C
-    D --> |L long press|C
-    D --> |R long press|E[Energy Screen]
-    E --> |R long press|D
+    D --> |L long press|E[Menu]
+    E --> |Settings|F[Settings]
+    E --> |Back|D
+    F --> |Back|E
+    D --> |R long press|G[Energy Screen]
+    G --> |R long press|D
     D --> |L+R long press|D_lock[Input Lock]
     D_lock --> |L+R long press|D
 ```
@@ -58,13 +63,17 @@ flowchart LR
 | `1.0.0` | x | x | x | x |
 | `2.0.0` | x | x | x | x |
 | `2.0.1` | x | x | x | x |
+| `2.1.0` | x | x | x | x |
 
 The main difference between HW 1.0 and later revisions is the sense
 resistor change (10 mΩ → 5 mΩ), which affects the current reading scale.
-HW 1.1+ changes are mainly connector and component rearrangement.
+HW 1.0 and HW 1.1 also lack the V_SENSE voltage divider, so on those
+boards the firmware reads source-side voltage from the AP33772 instead of
+a dedicated ADC channel. The v2 build picks the right source automatically
+per board.
 
 <p align="center" width="100%">
-    <img width="80%" src="media/pocketpd_limited.jpg">
+    <img width="80%" src="media/pocketpd_limited.png">
 </p>
 
 > HW 1.0 — the "Limited" edition. Retired due to mass-production constraints.
@@ -76,96 +85,118 @@ HW 1.1+ changes are mainly connector and component rearrangement.
 <details>
 <summary>Boot sequence, controls and screen modes</summary>
 
+### Controls
+
+| Control | Action | What it does |
+|---|---|---|
+| Knob | Rotate | Adjust the value you're editing (PPS only) |
+| Knob | Tap | Cycle step size: coarse → medium → fine (PPS only) |
+| L | Tap | Switch between voltage and current adjust (PPS only) |
+| L | Hold | Open Menu |
+| R | Tap | Turn output on / off |
+| R | Hold | Open Energy screen |
+| L + R | Hold | Lock / unlock all inputs |
+
+Inside the menu, profile picker, and settings the knob drives navigation:
+rotate to move the cursor, push to choose, hold L to go back.
+
 ### Boot sequence
 
 The system displays the firmware version on startup.
 
 <p align="center" width="100%">
-    <img width="80%" src="media/screen_boot_.jpg">
+    <img width="78%" src="media/screen_boot_.jpg">
 </p>
 
-It then shows the available profiles from the charger. **A PPS profile is
-required** for full bench-supply functionality. If your charger does not
-support PPS, see [Non-PPS chargers](#non-pps-chargers) below.
+Once negotiation finishes, the profile picker lists all published PDO
+profiles from the charger. Fixed profiles show e.g. `PDO 5V 3A`; PPS
+profiles show their adjustable range, like `PPS 3.3~21.0V 5A`.
 
 <p align="center" width="100%">
-    <img width="80%" src="media/screen_menu_.jpg">
+    <img width="78%" src="media/screen_menu_.jpg">
 </p>
 
-After 3 seconds the system enters operating mode. With PPS available it
-requests 5 V @ 1 A by default.
+Rotate the knob to highlight a profile, then push and hold to commit.
+A charger with no PPS profile still works, but the adjustable power
+supply feature is unavailable.
 
 <p align="center" width="100%">
-    <img width="80%" src="media/screen_pps_.jpg">
+    <img width="78%" src="media/screen_menu_nonpps_.jpg">
 </p>
 
-To select a different profile, hold the V/A button for 3 s to enter the
-MENU screen.
+### Normal operation — PPS
 
-### Skip boot screen
-
-While still on the boot screen:
-
-* Press any **button** → skip to NORMAL (operating screen)
-* Rotate the **encoder** → skip to MENU (profile selection)
-  * Turn to select profile, long-press encoder to activate
+The big numbers are live measurements. The target voltage and current sit
+below each reading; a small underscore cursor marks which value is being
+edited.
 
 <p align="center" width="100%">
-<video src="https://github.com/user-attachments/assets/563d36e5-1c92-49e6-aa88-c873a20ddf1d" width="80%" controls></video>
+    <img width="78%" src="media/screen_pps_.jpg">
 </p>
 
-### Normal operation
+Tap L to move between volts and amps, push the knob to cycle step size
+(volts: 1 V / 100 mV / 20 mV; amps: 1 A / 100 mA / 50 mA), then rotate
+to set the value. Tap R to toggle the output on/off.
 
-| Input | Action |
-|---|---|
-| Rotate encoder | Increase / decrease voltage or current |
-| Short press encoder | Toggle fine ↔ coarse increment |
-| Short press L button | Switch between voltage and current adjust |
-| Long press L button | Return to Profile Picker |
-| Short press R button | Enable / disable output |
-| Long press R button | Enter ENERGY screen |
-| Long press L+R | Toggle input lock |
+### Normal operation — Fixed
+
+Fixed and passthrough profiles have nothing to adjust; the knob and L tap
+do nothing. Only the rated voltage and current are shown.
 
 <p align="center" width="100%">
-<video src="https://github.com/user-attachments/assets/1aa5be08-7ff9-443c-b3c7-ea3d54f766d1" width="80%" controls></video>
-</p>
-
-<p align="center" width="100%">
-<video src="https://github.com/user-attachments/assets/d8f55b10-d94f-4dc2-9a7f-f5e726f47ec9" width="80%" controls></video>
-</p>
-
-<p align="center" width="100%">
-<video src="https://github.com/user-attachments/assets/7a1174bd-7ffe-4ea3-8e91-18dc4e83c6fd" width="80%" controls></video>
-</p>
-
-### Menu screen
-
-<p align="center" width="100%">
-    <img width="80%" src="media/screen_menu_.jpg">
+    <img width="78%" src="media/screen_fix_.jpg">
 </p>
 
 ### Energy screen
 
-<p align="center" width="100%">
-    <img width="80%" src="media/screen_energy_.jpg">
-</p>
-
-### Fixed PDO profile (example: 15 V @ 3 A)
+Hold R to open the energy screen. It shows power, live V/A, elapsed time,
+watt-hours and amp-hours. Hold R again to go back. The counter accumulates
+only while the output is on.
 
 <p align="center" width="100%">
-    <img width="80%" src="media/screen_fix_.jpg">
+    <img width="78%" src="media/screen_energy_.jpg">
 </p>
 
-### Non-PPS chargers
+### Menu and settings
 
-If your charger lacks a PPS profile, PocketPD boots directly into the
-first 5 V fixed PDO. The menu will look like this:
+Hold L to open the menu.
 
-<p align="center" width="100%">
-    <img width="80%" src="media/screen_menu_nonpps_.jpg">
-</p>
+* **Skip picker** — when enabled, PocketPD boots straight to the
+  operating screen using the first 5 V profile instead of stopping at the
+  picker.
+* **Voltage comp** — when enabled, PocketPD watches the load-side voltage
+  and raises the PPS request in 20 mV steps (up to 500 mV) to cancel the
+  IR drop across cable and connectors. Active only while output is on and
+  a PPS profile is selected; resets on output-off or profile change.
+
+### Non-PD sources
+
+Plug in a charger with no USB-PD profiles and PocketPD shows `Non-PD
+Source`, then activates passthrough mode after a few seconds. It meters
+the voltage and current flowing through to your load.
 
 </details>
+
+---
+
+## Firmware under the hood
+
+v2 is a rewrite of the original monolithic firmware. It runs on `tempo`,
+a small cooperative scheduler and typed event bus built for this project
+(lives in `lib/tempo/` with its own native tests).
+
+The UI is a stack of stages, one per screen: boot, PD negotiation,
+profile picker, operating, energy, menu, and settings. Periodic tasks run
+alongside the stages and talk to them over the event bus.
+
+Hardware sits behind interfaces — one each for the PD sink, power monitor,
+display, output switch, and supply-voltage source. That split lets the
+AP33772 and INA226 drivers and the stage logic build and run as unit tests
+on a host machine:
+
+```
+pio test -e native
+```
 
 ---
 
@@ -176,7 +207,8 @@ first 5 V fixed PDO. The menu will look like this:
 
 ### Prerequisites
 
-* [VS Code](https://code.visualstudio.com/download) with the
+* [PlatformIO CLI](https://docs.platformio.org/en/latest/core/installation/index.html)
+  or [VS Code](https://code.visualstudio.com/download) with the
   [PlatformIO extension](https://docs.platformio.org/en/latest/integration/ide/vscode.html#installation)
 
 > **Windows users:** before the first build, follow
@@ -188,9 +220,12 @@ first 5 V fixed PDO. The menu will look like this:
 
 ### Build
 
-1. Open PlatformIO → select the env matching your hardware (`HW1_0` or `HW1_3`)
-2. Click **General → Build**
-3. Output: `.pio/build/HW1_0/` or `.pio/build/HW1_3/`
+```
+make build-all
+```
+
+This builds `.uf2` files for all supported HW versions. Output goes to
+the `dist/` folder.
 
 </details>
 
@@ -210,12 +245,15 @@ Pick the correct `.uf2` from
 
 | Hardware | File |
 |---|---|
-| HW 1.0 ("Limited") | `firmware_xx_HW1.0.uf2` |
-| HW 1.1+ | `firmware_xx_HW1.1.uf2` |
+| HW 1.0 ("Limited") | `PocketPD_HW1_0-v2.1.0.uf2` |
+| HW 1.1+ / CrowdSupply | `PocketPD_HW1_3-v2.1.0.uf2` |
 
-If building from source, the `.uf2` is in `.pio/build/HW1_0/` or `.pio/build/HW1_3/`.
+If building from source, the `.uf2` is in `dist/`.
 
 ### Step 2 — Enter bootloader (mount as `RPI-RP2` drive)
+
+> **If PocketPD doesn't show up as a drive, connect it through any USB
+> hub (USB 2 or USB 3).** See [Issue #23](https://github.com/CentyLab/PocketPD/issues/23).
 
 #### macOS
 
@@ -242,7 +280,8 @@ If building from source, the `.uf2` is in `.pio/build/HW1_0/` or `.pio/build/HW1
 
 ### Step 3 — Flash
 
-Drag and drop the `.uf2` file into the `RPI-RP2` drive.
+Drag and drop the `.uf2` file into the `RPI-RP2` drive. The device
+reboots into the new firmware on its own.
 
 See also: [How to upload new firmware to PocketPD (Wiki)](https://github.com/CentyLab/PocketPD/wiki/How-to-upload-new-firmware-to-PocketPD)
 
