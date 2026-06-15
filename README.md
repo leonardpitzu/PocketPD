@@ -1,6 +1,6 @@
 # PocketPD
 
-[![PlatformIO CI](https://github.com/braamBeresford/PocketPD/actions/workflows/main.yml/badge.svg)](https://github.com/braamBeresford/PocketPD/actions/workflows/main.yml)
+[![PlatformIO CI](https://github.com/leonardpitzu/PocketPD/actions/workflows/main.yml/badge.svg)](https://github.com/leonardpitzu/PocketPD/actions/workflows/main.yml)
 
 PocketPD turns any PPS-capable USB-C charger into a pocket-sized bench
 power supply, with a rotary encoder and two interface buttons for precise
@@ -19,6 +19,7 @@ Simple, reliable, works when you need it.
 | **Profiles** | PPS (variable) and fixed PDO selection |
 | **Cable comp** | IR-drop compensation holds voltage at the load |
 | **Input lock** | L+R long-press freezes all controls |
+| **Flip display** | Rotate OLED 180° for right-encoder PCB orientation |
 | **MCU** | RP2040 (Raspberry Pi Pico) |
 | **Framework** | Arduino (earlephilhower core) via PlatformIO |
 
@@ -64,6 +65,7 @@ flowchart LR
 | `2.0.0` | x | x | x | x |
 | `2.0.1` | x | x | x | x |
 | `2.1.0` | x | x | x | x |
+| `2.2.0` | x | x | x | x |
 
 The main difference between HW 1.0 and later revisions is the sense
 resistor change (10 mΩ → 5 mΩ), which affects the current reading scale.
@@ -168,6 +170,9 @@ Hold L to open the menu.
   and raises the PPS request in 20 mV steps (up to 500 mV) to cancel the
   IR drop across cable and connectors. Active only while output is on and
   a PPS profile is selected; resets on output-off or profile change.
+* **Flip display** — when enabled, rotates the OLED 180° and swaps L/R
+  button mapping so the unit works naturally when held with the encoder on
+  the right.
 
 ### Non-PD sources
 
@@ -245,8 +250,8 @@ Pick the correct `.uf2` from
 
 | Hardware | File |
 |---|---|
-| HW 1.0 ("Limited") | `PocketPD_HW1_0-v2.1.0.uf2` |
-| HW 1.1+ / CrowdSupply | `PocketPD_HW1_3-v2.1.0.uf2` |
+| HW 1.0 ("Limited") | `PocketPD_HW1_0-v2.2.0.uf2` |
+| HW 1.1+ / CrowdSupply | `PocketPD_HW1_3-v2.2.0.uf2` |
 
 If building from source, the `.uf2` is in `dist/`.
 
