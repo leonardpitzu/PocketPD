@@ -138,3 +138,6 @@ build/
 
 # Syncthing conflict files
 *.sync-conflict-*
+
+# Agent memory (local only — never publish)
+AGENTS.md
