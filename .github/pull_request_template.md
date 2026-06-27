@@ -2,7 +2,7 @@
 <!-- One paragraph: what changed and why. Skip if commit message already says it. -->
 
 ## Linked issues
-<!-- Fixes #123, Refs #456 — leave blank if none -->
+<!-- Fixes #123, Refs #456 - leave blank if none -->
 
 ## Hardware tested
 - [ ] HW1_3

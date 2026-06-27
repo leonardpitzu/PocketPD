@@ -11,7 +11,7 @@ All notable changes to PocketPD v2 firmware.
 - **Skip-picker-on-boot.** With this enabled, PocketPD boots straight to the normal view using the first PDO profile (5V) instead of showing the profile picker. User can enable this option in Settings page. 
 - **Menu and Settings** Menu and Settings are new screens. Menu replaces L-LONG to expand PocketPD capabilities.
 
-### Under the hood
+### Internals
 
 - AP33772 PD negotiation timeout default lowered from 10s to 5s; `begin()` takes the poll budget as a parameter.
 - `PreferencesStore` persists settings to EEPROM (layout-version byte + CRC8).

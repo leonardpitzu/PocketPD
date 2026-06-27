@@ -15,7 +15,7 @@ Simple, reliable, works when you need it.
 | **Voltage** | Adjustable within charger PPS range |
 | **Current** | Adjustable within charger PPS range |
 | **Controls** | Rotary encoder + two buttons (V/A, On/Off) |
-| **Display** | OLED — voltage, current, power, energy |
+| **Display** | OLED - voltage, current, power, energy |
 | **Profiles** | PPS (variable) and fixed PDO selection |
 | **Cable comp** | IR-drop compensation holds voltage at the load |
 | **Input lock** | L+R long-press freezes all controls |
@@ -25,8 +25,8 @@ Simple, reliable, works when you need it.
 
 ## Links
 
-* [PocketPD Project — Hackaday](https://hackaday.io/project/194295-pocketpd-usb-c-portable-bench-power-supply)
-* [PocketPD Hardware — GitHub](https://github.com/CentyLab/PocketPD_HW)
+* [PocketPD Project - Hackaday](https://hackaday.io/project/194295-pocketpd-usb-c-portable-bench-power-supply)
+* [PocketPD Hardware - GitHub](https://github.com/CentyLab/PocketPD_HW)
 * [Firmware Releases](https://github.com/CentyLab/PocketPD/releases)
 * [Flashing Guide (Wiki)](https://github.com/CentyLab/PocketPD/wiki/How-to-upload-new-firmware-to-PocketPD)
 
@@ -68,7 +68,7 @@ flowchart LR
 | `2.2.0` | x | x | x | x |
 
 The main difference between HW 1.0 and later revisions is the sense
-resistor change (10 mΩ → 5 mΩ), which affects the current reading scale.
+resistor change (10 mΩ -> 5 mΩ), which affects the current reading scale.
 HW 1.0 and HW 1.1 also lack the V_SENSE voltage divider, so on those
 boards the firmware reads source-side voltage from the AP33772 instead of
 a dedicated ADC channel. The v2 build picks the right source automatically
@@ -78,7 +78,7 @@ per board.
     <img width="80%" src="media/pocketpd_limited.png">
 </p>
 
-> HW 1.0 — the "Limited" edition. Retired due to mass-production constraints.
+> HW 1.0 - the "Limited" edition. Retired due to mass-production constraints.
 
 ---
 
@@ -92,7 +92,7 @@ per board.
 | Control | Action | What it does |
 |---|---|---|
 | Knob | Rotate | Adjust the value you're editing (PPS only) |
-| Knob | Tap | Cycle step size: coarse → medium → fine (PPS only) |
+| Knob | Tap | Cycle step size: coarse -> medium -> fine (PPS only) |
 | L | Tap | Switch between voltage and current adjust (PPS only) |
 | L | Hold | Open Menu |
 | R | Tap | Turn output on / off |
@@ -126,7 +126,7 @@ supply feature is unavailable.
     <img width="78%" src="media/screen_menu_nonpps_.jpg">
 </p>
 
-### Normal operation — PPS
+### Normal operation - PPS
 
 The big numbers are live measurements. The target voltage and current sit
 below each reading; a small underscore cursor marks which value is being
@@ -140,7 +140,7 @@ Tap L to move between volts and amps, push the knob to cycle step size
 (volts: 1 V / 100 mV / 20 mV; amps: 1 A / 100 mA / 50 mA), then rotate
 to set the value. Tap R to toggle the output on/off.
 
-### Normal operation — Fixed
+### Normal operation - Fixed
 
 Fixed and passthrough profiles have nothing to adjust; the knob and L tap
 do nothing. Only the rated voltage and current are shown.
@@ -163,14 +163,14 @@ only while the output is on.
 
 Hold L to open the menu.
 
-* **Skip picker** — when enabled, PocketPD boots straight to the
+* **Skip picker** - when enabled, PocketPD boots straight to the
   operating screen using the first 5 V profile instead of stopping at the
   picker.
-* **Voltage comp** — when enabled, PocketPD watches the load-side voltage
+* **Voltage comp** - when enabled, PocketPD watches the load-side voltage
   and raises the PPS request in 20 mV steps (up to 500 mV) to cancel the
   IR drop across cable and connectors. Active only while output is on and
   a PPS profile is selected; resets on output-off or profile change.
-* **Flip display** — when enabled, rotates the OLED 180° and swaps L/R
+* **Flip display** - when enabled, rotates the OLED 180° and swaps L/R
   button mapping so the unit works naturally when held with the encoder on
   the right.
 
@@ -184,7 +184,7 @@ the voltage and current flowing through to your load.
 
 ---
 
-## Firmware under the hood
+## Firmware internals
 
 v2 is a rewrite of the original monolithic firmware. It runs on `tempo`,
 a small cooperative scheduler and typed event bus built for this project
@@ -194,7 +194,7 @@ The UI is a stack of stages, one per screen: boot, PD negotiation,
 profile picker, operating, energy, menu, and settings. Periodic tasks run
 alongside the stages and talk to them over the event bus.
 
-Hardware sits behind interfaces — one each for the PD sink, power monitor,
+Hardware sits behind interfaces - one each for the PD sink, power monitor,
 display, output switch, and supply-voltage source. That split lets the
 AP33772 and INA226 drivers and the stage logic build and run as unit tests
 on a host machine:
@@ -243,7 +243,7 @@ the `dist/` folder.
 
 > Firmware `0.9.5` and earlier is for **HW 1.0 only**.
 
-### Step 1 — Download
+### Step 1 - Download
 
 Pick the correct `.uf2` from
 [Firmware Releases](https://github.com/CentyLab/PocketPD/releases):
@@ -255,35 +255,35 @@ Pick the correct `.uf2` from
 
 If building from source, the `.uf2` is in `dist/`.
 
-### Step 2 — Enter bootloader (mount as `RPI-RP2` drive)
+### Step 2 - Enter bootloader (mount as `RPI-RP2` drive)
 
 > **If PocketPD doesn't show up as a drive, connect it through any USB
 > hub (USB 2 or USB 3).** See [Issue #23](https://github.com/CentyLab/PocketPD/issues/23).
 
 #### macOS
 
-* **Easy** — Short BOOT pads (HW 1.0) or hold the BOOT button (HW 1.1+).
-  Connect via USB-A → USB-C adapter + cable. `RPI-RP2` drive appears.
-* **Intermediate** — Connect first, then open a serial port at 1200 baud.
+* **Easy** - Short BOOT pads (HW 1.0) or hold the BOOT button (HW 1.1+).
+  Connect via USB-A -> USB-C adapter + cable. `RPI-RP2` drive appears.
+* **Intermediate** - Connect first, then open a serial port at 1200 baud.
   `RPI-RP2` drive appears.
 
 #### Windows
 
-* **Easy** — Short BOOT pads / hold BOOT button, then connect via USB.
+* **Easy** - Short BOOT pads / hold BOOT button, then connect via USB.
   `RPI-RP2` drive appears.
-* **Intermediate** — Connect first, then open a serial port at 1200 baud
+* **Intermediate** - Connect first, then open a serial port at 1200 baud
   with [PuTTY](https://www.putty.org/). `RPI-RP2` drive appears.
 
 #### Linux
 
-* **Easy** — Short BOOT pads / hold BOOT button, then connect via USB.
+* **Easy** - Short BOOT pads / hold BOOT button, then connect via USB.
   The device enumerates as mass storage (`RPI-RP2`). Most desktops
   auto-mount it; otherwise: `sudo mount /dev/sdX1 /mnt`.
-* **Intermediate** — Connect first, then touch the serial port at 1200
+* **Intermediate** - Connect first, then touch the serial port at 1200
   baud (e.g. `picocom -b 1200 /dev/ttyACM0` or
   `stty -F /dev/ttyACM0 1200`). The device re-enumerates as `RPI-RP2`.
 
-### Step 3 — Flash
+### Step 3 - Flash
 
 Drag and drop the `.uf2` file into the `RPI-RP2` drive. The device
 reboots into the new firmware on its own.
@@ -296,5 +296,5 @@ See also: [How to upload new firmware to PocketPD (Wiki)](https://github.com/Cen
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE)
 file for details.
