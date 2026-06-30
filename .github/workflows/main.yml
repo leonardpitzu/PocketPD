@@ -37,11 +37,13 @@ jobs:
         run: pio run -e ${{ matrix.env }}
 
       - name: Upload firmware binary
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: firmware-${{ matrix.env }}
           path: .pio/build/${{ matrix.env }}/firmware.uf2
           if-no-files-found: warn
+          retention-days: 14
 
   test:
     name: Run Tests
