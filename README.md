@@ -163,9 +163,10 @@ only while the output is on.
 
 Hold L to open the menu.
 
-* **Skip picker** - when enabled, PocketPD boots straight to the
-  operating screen using the first 5 V profile instead of stopping at the
-  picker.
+* **Restore profile** - when enabled, PocketPD saves the last profile
+  plus its voltage/current and, on boot, restores them and jumps straight
+  to the operating screen. On a charger swap where the voltage/current
+  fall outside the saved profile's range, it falls back to the picker.
 * **Voltage comp** - when enabled, PocketPD watches the load-side voltage
   and raises the PPS request in 20 mV steps (up to 500 mV) to cancel the
   IR drop across cable and connectors. Active only while output is on and
@@ -250,8 +251,8 @@ Pick the correct `.uf2` from
 
 | Hardware | File |
 |---|---|
-| HW 1.0 ("Limited") | `PocketPD_HW1_0-v2.2.0.uf2` |
-| HW 1.1+ / CrowdSupply | `PocketPD_HW1_3-v2.2.0.uf2` |
+| HW 1.0 ("Limited") | `PocketPD_HW1_0-v2.3.0.uf2` |
+| HW 1.1+ / CrowdSupply | `PocketPD_HW1_3-v2.3.0.uf2` |
 
 If building from source, the `.uf2` is in `dist/`.
 
